@@ -147,30 +147,39 @@ python scripts/generate_architecture_diagrams.py
 
 ## 🧪 지금 내 컴퓨터에서 바로 해보는 "3분 핸즈온 체험"
 
-현재 계신 터미널(PowerShell 또는 Git Bash)에서 **아래 순서대로 명령어를 복사해서 실행**해 보세요. 직접 상황을 눈으로 보면 전체 그림이 바로 와닿습니다!
+현재 계신 터미널(PowerShell 또는 Git Bash)에서 **아래 순서대로 명령어를 복사해서 실행**해 보세요. 각 명령어가 컴퓨터에게 무엇을 시키는지 친절한 주석과 함께 정리되어 있습니다!
 
 ```powershell
-# 프로젝트 폴더로 이동 (이미 여기 계시다면 바로 진행)
+# [의미]: 실습 프로젝트 루트 디렉토리로 작업 위치를 이동합니다.
 cd "c:\Users\안재현\Documents\24_code\2609_codyssey\codyssey-b4-01"
 ```
 
+---
+
 ### [상황 1] 점원 출근시키기 (정상 부팅 시퀀스 눈으로 보기)
 
-가게를 오픈하기 위해 필요한 테스트 환경을 잠깐 만들고 앱을 실행해 봅니다.
+가게를 오픈하기 위해 필요한 테스트 환경을 잠깐 만들고 파이썬 점원(`agent_app.py`)을 실행해 봅니다.
 
 ```powershell
-# 1. 테스트용 임시 폴더와 비밀키 1초 만에 준비
+# 1. [의미]: 업로드함, 비밀금고, 로그서랍 폴더 3개를 한 번에 생성합니다. (-p: 없는 부모폴더 자동생성)
 mkdir -p tests/demo/upload_files, tests/demo/api_keys, tests/demo/logs
+
+# 2. [의미]: 비밀금고에 t_secret.key 파일을 만들고 암호 문자열 'agent_api_key_test'를 기록해둡니다.
 Set-Content -Path tests/demo/api_keys/t_secret.key -Value "agent_api_key_test"
 
-# 2. 환경 변수를 걸어주고 앱 실행!
+# 3. [의미]: 파이썬 앱이 읽을 '근무 지침서(환경 변수)'를 윈도우 메모리에 5개 등록합니다.
+#    - 홈 위치 지정 (AGENT_HOME)
 $env:AGENT_HOME = "$PWD\tests\demo"
+#    - 손님을 맞이할 카운터 출입구 번호 지정 (AGENT_PORT: 15034)
 $env:AGENT_PORT = "15034"
+#    - 파일 업로드 폴더 위치 지정 (AGENT_UPLOAD_DIR)
 $env:AGENT_UPLOAD_DIR = "$PWD\tests\demo\upload_files"
+#    - 비밀키 파일의 정확한 위치 지정 (AGENT_KEY_PATH)
 $env:AGENT_KEY_PATH = "$PWD\tests\demo\api_keys\t_secret.key"
+#    - 모니터링 로그를 남길 서랍 위치 지정 (AGENT_LOG_DIR)
 $env:AGENT_LOG_DIR = "$PWD\tests\demo\logs"
 
-# 앱 실행 (새 창으로 띄우기)
+# 4. [의미]: 현재 터미널을 가로막지 않도록 '별도의 새 창'을 띄워 파이썬 점원(agent_app.py)을 출근시킵니다.
 Start-Process python -ArgumentList "app/agent_app.py"
 ```
 
@@ -181,14 +190,20 @@ Start-Process python -ArgumentList "app/agent_app.py"
 
 ### [상황 2] 순찰 닥터 출동시키기 (monitor.sh 정상 작동 눈으로 보기)
 
-가게가 잘 열려있는 상태에서 닥터(`monitor.sh`)를 수동으로 출동시켜 봅니다.
+가게가 잘 열려있는 상태에서 닥터(`monitor.sh`)를 수동으로 1회 출동시켜 봅니다.
 
 ```powershell
-# Git Bash를 통해 monitor.sh 1회 실행
+# [의미]: 윈도우 파워셸에서 Git에 내장된 리눅스 쉘(bash.exe)을 빌려와서,
+# 15034번 포트와 앱 이름(agent_app.py)을 전달한 뒤 monitor.sh 관제 스크립트를 1회 실행합니다.
+# &가 있으면 그 위치로 가서 즉시 실행시킴
 & "C:\Program Files\Git\bin\bash.exe" -c "
+# 닥터에게 감시할 포트 번호(15034)를 전달합니다.
 export AGENT_PORT=15034
+# 닥터에게 감시할 점원 프로세스 이름(agent_app.py)을 알려줍니다.
 export APP_PROCESS_NAME=agent_app.py
+# 닥터에게 진료 기록(로그)을 작성할 폴더 위치를 알려줍니다.
 export AGENT_LOG_DIR=tests/demo/logs
+# 순찰 닥터 스크립트를 즉시 가동합니다!
 bash bin/monitor.sh
 "
 ```
@@ -208,6 +223,7 @@ bash bin/monitor.sh
 방금 닥터가 남긴 진료 기록을 확인해 봅니다.
 
 ```powershell
+# [의미]: 리눅스의 'cat'이나 윈도우의 'type'처럼, monitor.log 파일에 적힌 텍스트 내용을 화면에 출력합니다.
 Get-Content tests/demo/logs/monitor.log
 ```
 
@@ -224,10 +240,10 @@ Get-Content tests/demo/logs/monitor.log
 이제 점원(파이썬 앱)을 강제로 강제 종료시켜 버립니다.
 
 ```powershell
-# 1. 실행 중인 파이썬 앱 강제 종료
+# 1. [의미]: 작업관리자의 강제종료처럼, 컴퓨터에서 돌고 있는 모든 파이썬 프로그램을 강제로 끕니다. (장애 유발)
 Stop-Process -Name python -Force
 
-# 2. 순찰 닥터(monitor.sh) 다시 출동!
+# 2. [의미]: 점원이 쓰러진 상태에서 순찰 닥터(monitor.sh)를 다시 출동시켜 봅니다.
 & "C:\Program Files\Git\bin\bash.exe" -c "
 export AGENT_PORT=15034
 export APP_PROCESS_NAME=agent_app.py
@@ -240,8 +256,9 @@ bash bin/monitor.sh
 ```text
 [ERROR] Health Check Failed: Process 'agent_app.py' is NOT running!
 ```
+
 ```powershell
-# 방금 실행의 종료 코드 확인 (1이 나오면 장애를 성공적으로 감지한 것!)
+# [의미]: 방금 끝난 monitor.sh가 남긴 '종료 신호 코드(Exit Code)'를 확인합니다. (0=정상, 1=비상 장애 감지)
 $LASTEXITCODE
 ```
 - 점원이 사라진 것을 닥터가 **즉시 알아채고 빨간 불(`[ERROR]`, exit 1)을 뿜으며 비상 경보**를 울립니다!
@@ -253,6 +270,7 @@ $LASTEXITCODE
 우리가 만들어 둔 테스트 러너가 이 모든 상황(포트 다운, 프로세스 다운, 로그 로테이션 등)을 컴퓨터가 1초 만에 알아서 테스트하게 해 줍니다.
 
 ```powershell
+# [의미]: 12가지 검증 시험(프로세스 부재, 포트 닫힘, 정상 로깅, 10MB 큐 로테이션)을 자동으로 채점합니다.
 & "C:\Program Files\Git\bin\bash.exe" tests/test_monitor.sh
 ```
 
@@ -267,4 +285,5 @@ $LASTEXITCODE
 2. **`monitor.sh`**: 1분마다 점원 맥박 재고 일기장 쓰는 의사
 3. **`crontab`**: 의사를 1분마다 등 떠미는 자명종 시계
 4. **`UFW / SSH 20022`**: 가게 털러 오는 도둑 막는 자물쇠와 경비실
+
 
