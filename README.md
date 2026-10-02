@@ -82,85 +82,164 @@ codyssey-b4-01/
 
 터미널 창을 **2개** 나란히 띄워두고 보여줍니다:
 
-* **[창 1] 가상머신 접속 및 백엔드 앱 가동 확인**:
-  ```powershell
-  # 윈도우 PowerShell에서 실행
-  wsl -d Ubuntu-22.04 -u agent-admin
-  ```
-  ```bash
-  # 앱 서비스 상태 점검 (가상머신 부팅 시 systemd 서비스로 자동 상시 가동)
-  sudo systemctl status agent-app
-  
-  # 앱 핑 테스트 (포트 15034 정상 응답 확인)
-  curl -i http://localhost:15034/
-  ```
-  *(정상 응답: `HTTP/1.1 200 OK`, `Agent Status: OK`)*
+#### [창 1] 가상머신 접속 및 백엔드 앱 가동 확인
 
-* **[창 2] 1분마다 자동 기록되는 실시간 건강검진 로그 띄워두기**:
-  ```bash
-  tail -f /var/log/agent-app/monitor.log
+```powershell
+# 1. 윈도우 PowerShell에서 가상머신 접속
+wsl -d Ubuntu-22.04 -u agent-admin
+```
+* **정상 화면**: `agent-admin@DESKTOP-...:~$` (최고 관리자 프롬프트 진입)
+* **의미**: Ubuntu 22.04 LTS 가상환경에 보안 관리자 `agent-admin` 계정으로 정상 로그인되었습니다.
+
+```bash
+# 2. 앱 서비스 상태 점검 (가상머신 부팅 시 systemd 서비스로 자동 상시 가동)
+sudo systemctl status agent-app
+```
+* **정상 출력 화면**:
+  ```text
+  ● agent-app.service - Codyssey B4-1 Python Agent Application
+       Loaded: loaded (/etc/systemd/system/agent-app.service; enabled; vendor preset: enabled)
+       Active: active (running) since Fri 2026-10-02 17:47:32 KST; 1min ago
+     Main PID: 977 (python3)
+        Tasks: 1 (limit: 4297)
+       Memory: 4.2M
   ```
-  > 🗣️ **평가자 설명**: *"crontab이 1분마다 무중단으로 `monitor.sh`를 구동하여 CPU, MEM, DISK 상태를 실시간 로깅하고 있습니다."*
+* **각 항목의 의미**:
+  * `enabled`: 가상머신이 켜질 때마다 앱이 알아서 켜지도록 systemd 부팅 서비스에 등록되어 있음을 의미합니다.
+  * `active (running)`: 현재 백엔드 앱이 죽지 않고 메모리에 정상적으로 살아 숨 쉬며 서비스 중임을 의미합니다.
+  * `Main PID: 977 (python3)`: 운영체제로부터 고유 프로세스 ID(PID 977)를 부여받아 백엔드 파이썬이 실행 중임을 의미합니다.
+
+```bash
+# 3. 앱 핑 테스트 (포트 15034 정상 응답 확인)
+curl -i http://localhost:15034/
+```
+* **정상 출력 화면**:
+  ```text
+  HTTP/1.1 200 OK
+  Content-Type: text/plain
+  Content-Length: 17
+  Connection: close
+
+  Agent Status: OK
+  ```
+* **각 항목의 의미**:
+  * `HTTP/1.1 200 OK`: 서버가 클라이언트 요청을 에러 없이 완벽히 수신 및 처리했음을 나타내는 표준 성공 상태 코드입니다.
+  * `Agent Status: OK`: 앱 내부의 5단계 부팅 자가 검증(키 파일, 업로드 폴더, 로그 폴더, 포트 15034 바인딩)을 모두 통과한 정상 상태임을 서버가 직접 증명한 메시지입니다.
+
+---
+
+#### [창 2] 1분마다 자동 기록되는 실시간 건강검진 로그 띄워두기
+
+```bash
+tail -f /var/log/agent-app/monitor.log
+```
+* **정상 출력 화면 (1분마다 1줄씩 추가됨)**:
+  ```text
+  [2026-10-02 17:47:15] PID:977 CPU:0% MEM:11% DISK_USED:1%
+  [2026-10-02 17:48:01] PID:977 CPU:0% MEM:11% DISK_USED:1%
+  [2026-10-02 17:49:01] PID:977 CPU:0% MEM:11% DISK_USED:1%
+  ```
+* **각 항목의 의미**:
+  * `[2026-10-02 17:48:01]`: 사람의 개입 없이 `crontab`이 1분 정각마다 `monitor.sh`를 깨워 순찰을 돌았음을 입증하는 타임스탬프입니다.
+  * `PID:977`: 관제 스크립트가 대상 앱(PID 977)의 생존 여부와 포트 15034 LISTEN 상태를 실시간 확인했음을 의미합니다.
+  * `CPU:0% MEM:11% DISK_USED:1%`: 시스템의 핵심 3대 자원 사용량을 정상 계측하여 누적 기록한 데이터입니다.
+* 🗣️ **평가자 설명 멘트**: *"crontab이 1분마다 무중단으로 `monitor.sh`를 구동하여 CPU, MEM, DISK 상태를 실시간 로깅하고 있습니다."*
 
 ---
 
 ### 📍 2단계: 상황별 요구조건 충족 시연 (4대 핵심 포인트)
 
-#### 상황 ① [정상 관제] 관제 스크립트 수동 실행
+#### 상황 ① [정상 관제] 관제 스크립트 수동 1회 실행
 ```bash
 ~/agent-app/bin/monitor.sh
 ```
-* **결과 확인**:
-  * `[INFO] Health Check Passed. PID=..., Port 15034 is ACTIVE.`
-  * `[INFO] Resource Usage: CPU=...%, MEM=...%, DISK=...%`
-  * `[INFO] Log record added to /var/log/agent-app/monitor.log`
+* **정상 출력 화면**:
+  ```text
+  [WARNING] Memory usage high: 11% (Threshold: >10%)
+  [INFO] Health Check Passed. PID=977, Port 15034 is ACTIVE.
+  [INFO] Resource Usage: CPU=0%, MEM=11%, DISK=1%
+  [INFO] Log record added to /var/log/agent-app/monitor.log
+  ```
+* **각 항목의 의미**:
+  * `[WARNING] Memory usage high: 11% (Threshold: >10%)`: 과제 요구조건인 메모리 임계치(>10%) 초과를 스크립트가 정확히 감지했습니다. 치명적 장애가 아니므로 프로세스를 중단하지 않고 경고만 출력합니다.
+  * `[INFO] Health Check Passed`: 프로세스 생존과 포트 활성화 2대 필수 조건을 모두 통과했다는 합격 판정입니다.
+  * `[INFO] Log record added...`: 방금 측정한 진단 결과가 `/var/log/agent-app/monitor.log`에 정상 추가되었음을 나타냅니다.
+
+---
 
 #### 상황 ② [장애 대응] 앱이 다운되었을 때 관제 스크립트의 Fail-Fast 감지 (★하이라이트)
 > 🗣️ **평가자 설명**: *"만약 예기치 못한 장애로 백엔드 앱이 죽었을 때 관제 스크립트가 즉시 비상 종료(Exit 1)하는지 보여드리겠습니다."*
 
-1. **앱 서비스 중지 (장애 주입)**:
-   ```bash
-   sudo systemctl stop agent-app
-   ```
-   *(또는 `pkill -f agent_app.py`)*
-2. **관제 스크립트 실행 (에러 감지 및 실패 반환 확인)**:
-   ```bash
-   ~/agent-app/bin/monitor.sh
-   echo "종료코드: $?"
-   ```
-   * **결과**: `[ERROR] Health Check Failed: Process 'agent_app.py' is NOT running!` 출력 및 **종료코드 1** 반환!
-3. **앱 서비스 다시 살리기 (정상 복구)**:
-   ```bash
-   sudo systemctl start agent-app
-   ```
-   *(curl로 다시 확인: `curl -i http://localhost:15034/` ➔ 200 OK)*
+**1. 앱 서비스 중지 (장애 주입)**:
+```bash
+sudo systemctl stop agent-app
+```
+* **의미**: 갑작스러운 서버 오류나 프로세스 충돌로 앱이 꺼진 장애 상황을 재현합니다.
+
+**2. 관제 스크립트 실행 및 에러 감지 확인**:
+```bash
+~/agent-app/bin/monitor.sh
+echo "종료코드: $?"
+```
+* **정상 출력 화면**:
+  ```text
+  [ERROR] Health Check Failed: Process 'agent_app.py' is NOT running!
+  종료코드: 1
+  ```
+* **각 항목의 의미**:
+  * `[ERROR] Health Check Failed...`: 닥터 스크립트가 앱의 비정상 종료를 즉각 감지하고 에러 메시지를 표준 에러(stderr)로 출력했습니다.
+  * `종료코드: 1`: 일반적인 정상 종료(0)가 아니라, 외부 관제 시스템에 장애를 즉각 전파할 수 있도록 실패 코드 `1`을 반환하며 즉시 멈췄음(Fail-Fast)을 증명합니다.
+
+**3. 앱 서비스 다시 살리기 (정상 복구)**:
+```bash
+sudo systemctl start agent-app
+curl -i http://localhost:15034/
+```
+* **정상 출력 화면**: `HTTP/1.1 200 OK`, `Agent Status: OK`
+* **의미**: 서비스를 다시 시작하여 앱이 정상적으로 복구되었음을 확인합니다.
+
+---
 
 #### 상황 ③ [보안/권한 격리] 테스터 계정의 보안 비밀키 접근 차단 (최소 권한의 원칙)
 > 🗣️ **평가자 설명**: *"POSIX ACL 및 파일 권한을 통해 테스터 계정은 업로드 폴더만 쓰고, 핵심 비밀키는 열람할 수 없도록 격리했습니다."*
 
-1. **테스터 계정으로 전환 (비밀번호 불필요)**:
-   ```bash
-   sudo su - agent-test
-   ```
-   *(또는 한 줄로 바로 검증: 아래 2, 3번 실행)*
+**1. 테스터 계정으로 전환 (비밀번호 불필요)**:
+```bash
+sudo su - agent-test
+```
+* **정상 화면**: `agent-test@DESKTOP-...:~$` (테스터 프롬프트로 변경됨)
+* **의미**: 비밀번호 입력 없이 테스터 계정 환경으로 즉시 전환되었습니다.
 
-2. **공용 업로드 폴더 파일 생성 (성공)**:
-   ```bash
-   touch /home/agent-admin/agent-app/upload_files/test_file.txt
-   ls -l /home/agent-admin/agent-app/upload_files/
-   ```
-   👉 테스터 소유 + `agent-common` 그룹 명찰로 정상 생성됨
+**2. 공용 업로드 폴더 파일 생성 (성공 확인)**:
+```bash
+touch /home/agent-admin/agent-app/upload_files/test_file.txt
+ls -l /home/agent-admin/agent-app/upload_files/test_file.txt
+```
+* **정상 출력 화면**:
+  ```text
+  -rw-rw----+ 1 agent-test agent-common 0 Oct  2 17:53 test_file.txt
+  ```
+* **각 항목의 의미**:
+  * `agent-test`: 테스터 계정 권한으로 파일이 성공적으로 생성되었습니다.
+  * `agent-common`: `upload_files` 디렉토리에 걸린 SetGID(2770) 속성 덕분에, 새 파일의 그룹 소속이 자동으로 공용 그룹(`agent-common`)으로 상속 지정되었습니다.
+  * `+` 기호: POSIX Default ACL이 상속되어 팀원 누구나 해당 파일을 함께 읽고 수정할 수 있음을 나타냅니다.
 
-3. **보안 비밀키 접근 시도 (차단 확인!)**:
-   ```bash
-   cat /home/agent-admin/agent-app/api_keys/t_secret.key
-   ```
-   * **결과**: `cat: /home/agent-admin/agent-app/api_keys/t_secret.key: Permission denied` (접근 거부로 완벽 차단!)
+**3. 보안 비밀키 접근 시도 (차단 확인!)**:
+```bash
+cat /home/agent-admin/agent-app/api_keys/t_secret.key
+```
+* **정상 출력 화면**:
+  ```text
+  cat: /home/agent-admin/agent-app/api_keys/t_secret.key: Permission denied
+  ```
+* **각 항목의 의미**:
+  * `Permission denied`: `api_keys` 폴더는 소유 그룹이 `agent-core`(보안팀 전용)이고 타인(others) 권한이 `0`이므로, `agent-common` 소속인 테스터의 접근이 커널 레벨에서 원천 차단되었음을 증명합니다.
 
-4. **원래 계정으로 복귀**:
-   ```bash
-   exit
-   ```
+**4. 원래 관리자 계정으로 복귀**:
+```bash
+exit
+```
+* **정상 화면**: `agent-admin@DESKTOP-...:~$` (관리자 계정으로 복귀 완료)
 
 > 💡 **Tip (계정 전환 없이 1줄로 보여주는 초간편 방법)**:
 > ```bash
@@ -175,7 +254,22 @@ codyssey-b4-01/
 ```bash
 sudo /mnt/c/Users/안재현/Documents/24_code/2609_codyssey/codyssey-b4-01/scripts/verify_all.sh
 ```
-* **8대 증거 확인**: SSH 20022/Root 차단, UFW 방화벽, 계정/그룹, 디렉토리/ACL, 앱 프로세스/포트, 관제 결과, 로그 누적, crontab 스케줄이 일목요연하게 출력됩니다.
+
+##### 📊 [필수 참고] 8대 증거 화면 출력 내용 및 상세 의미 해설
+
+| 번호 | 검증 증거 항목 | 터미널 핵심 출력 내용 | 실무적 의미 및 평가자 답변 멘트 |
+| :---: | :--- | :--- | :--- |
+| **증거 1** | **SSH 포트 및 Root 차단** | `Port 20022`<br/>`PermitRootLogin no`<br/>`LISTEN 0.0.0.0:20022` | 기본 22번 포트 자동 공격 봇을 무력화하고, root의 외부 직접 접속을 차단하여 접속자의 감사 추적성을 확보했습니다. |
+| **증거 2** | **UFW 방화벽 규칙** | `Status: active`<br/>`Default: deny (incoming)`<br/>`20022, 15034 ALLOW IN` | 인바운드 기본 정책을 deny로 잠그고(Zero Trust), 관리용 20022번과 서비스용 15034번만 최소 개방했습니다. |
+| **증거 3** | **계정 및 그룹 RBAC** | `admin (agent-core, sudo)`<br/>`dev (agent-core)`<br/>`test (agent-common ONLY)` | 최소 권한의 원칙에 따라 운영팀장, 개발자, 테스터의 그룹과 sudo 권한을 엄격히 분리 격리했습니다. |
+| **증거 4** | **디렉토리 권한 및 ACL** | `upload_files (2770, SetGID, ACL+)`<br/>`api_keys (0750, others 차단)`<br/>`monitor.sh (0750, agent-dev)` | 공용 폴더는 SetGID와 POSIX ACL로 팀 협업을 보장하고, 비밀키 방은 테스터가 들어오지 못하게 잠갔습니다. |
+| **증거 5** | **앱 프로세스 및 포트** | `PID (python3)`<br/>`tcp LISTEN 0.0.0.0:15034` | 백엔드 파이썬 에이전트 앱이 5단계 부팅 자가 검증을 마치고 15034 포트에서 정상 서비스 중입니다. |
+| **증거 6** | **관제 스크립트 실행** | `Health Check Passed`<br/>`PID=..., Port 15034 is ACTIVE`<br/>`Resource Usage: CPU, MEM, DISK` | 순수 Bash로 작성된 monitor.sh가 프로세스, 포트, 3대 자원 사용량을 정상 진단하고 건강 판정을 내렸습니다. |
+| **증거 7** | **누적 로깅 (디스크 보호)** | `/var/log/agent-app/monitor.log`<br/>`[날짜] PID:... CPU:...% MEM:...%` | 표준 시스템 로그 경로에 실시간 적재되며, 10MB x 10개 FIFO 큐 로테이션으로 디스크 풀을 방지합니다. |
+| **증거 8** | **crontab 스케줄링** | `* * * * * monitor.sh >> ...` | 관리자가 자리를 비워도 리눅스 cron 데몬이 1년 365일 매 1분마다 무중단으로 자동 순찰을 돕니다. |
+
+> 🗣️ **평가자 피날레 멘트**:  
+> *"이 종합 검증 스크립트 하나로 인프라 보안부터 방화벽, 계정 격리, 애플리케이션 서비스, 관제 스크립트와 crontab 무중단 로깅까지 과제의 8대 핵심 요구조건이 100% 충족되었음을 증명할 수 있습니다."*
 
 ---
 
