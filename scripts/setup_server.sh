@@ -39,21 +39,13 @@ echo "=========================================================="
 # [2차]: 공사에 필요한 도구들을 창고에서 꺼내오는 단계임을 알립니다.
 echo "[1/6] Installing required packages..."
 
-# [1차]: apt-get update -y 명령어로 우분투의 원격 패키지 저장소(Mirror) 최신 목록을 갱신합니다.
-# [2차]: 최신 공구 카탈로그 목록을 인터넷에서 새로 다운로드받아 업데이트합니다.
-apt-get update -y
-
-# [1차]: 과제 운영에 필요한 9개 핵심 패키지를 질문 없이 자동 승인(-y)으로 일괄 설치합니다.
-# - openssh-server : 원격 보안 쉘 접속 데몬
-# - ufw : 우분투 기본 방화벽 유틸리티
-# - acl : POSIX 고급 접근 제어 목록(setfacl/getfacl) 도구
-# - cron : 주기적인 예약 작업 스케줄러 데몬
-# - procps : ps, pgrep 등 프로세스 조회 유틸리티
-# - iproute2 : ss 등 소켓 및 네트워크 포트 조회 도구
-# - python3, python3-pip : 백엔드 에이전트 앱 구동 엔진
-# - curl : HTTP 요청 테스트 도구
-# [2차]: 건물 관리에 필요한 공구들(방화벽 차단기, 정밀 자물쇠, 알람시계, 현황판 등)을 연장통에 한 번에 싹 담아옵니다.
-apt-get install -y openssh-server ufw acl cron procps iproute2 python3 python3-pip curl
+# [1차]: 필수 도구(sshd, ufw, getfacl, cron, python3)가 이미 설치되어 있는지 확인하고 누락된 경우에만 설치합니다.
+# [2차]: 연장통에 이미 공구가 다 들어있으면 불필요하게 카탈로그를 다시 다운로드하지 않고 건너뜁니다.
+if ! command -v sshd >/dev/null 2>&1 || ! command -v ufw >/dev/null 2>&1 || ! command -v getfacl >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -y || true
+    apt-get install -y openssh-server ufw acl cron procps iproute2 python3 curl
+fi
 
 # ------------------------------------------------------------------------------
 # 2. SSH 보안 설정 (Port 20022, PermitRootLogin no)
@@ -96,7 +88,7 @@ fi
 if sshd -t; then
     # [1차]: 설정 검증 통과 시 SSH 데몬(ssh 또는 sshd)을 재기동하여 새 포트 20022를 활성화합니다.
     # [2차]: 새 문패를 정식으로 걸고 수문장(SSH 데몬)을 새 보초 근무지로 이동시킵니다.
-    systemctl restart ssh || systemctl restart sshd || true
+    systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || service ssh restart 2>/dev/null || service sshd restart 2>/dev/null || true
     echo "  -> SSH daemon restarted on Port 20022."
 else
     # [1차]: 설정 파일 문법 검증 실패 시 경고 메시지를 출력하고 중단을 방지합니다.
@@ -199,6 +191,22 @@ create_user_if_not_exists "agent-dev"   "agent-core" "agent-common"
 # [2차]: 공용 카페테리아만 갈 수 있고 비밀 금고는 못 들어가는 인턴 테스터 계정을 만듭니다.
 create_user_if_not_exists "agent-test"  "agent-common" "agent-common"
 
+# [1차]: agent-admin 계정에게 비밀번호 입력 없는 sudo 권한을 부여합니다.
+# [2차]: 운영팀장이 시스템 점검 및 과제 검증 시 매번 비밀번호를 묻지 않고 편하게 작업하도록 프리패스를 발급합니다.
+mkdir -p /etc/sudoers.d
+echo "agent-admin ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/agent-admin
+chmod 0440 /etc/sudoers.d/agent-admin
+
+# [1차]: WSL 환경에서 윈도우 한글 사용자명 등으로 인한 OOBE 충돌을 방지하고 기본 사용자를 설정합니다.
+if [ -d "/usr/lib/wsl" ]; then
+    grep -q '\[user\]' /etc/wsl.conf || echo -e '\n[user]\ndefault=agent-admin' >> /etc/wsl.conf
+    cat << 'EOF' > /usr/lib/wsl/wsl-setup
+#!/bin/bash
+exit 0
+EOF
+    chmod +x /usr/lib/wsl/wsl-setup
+fi
+
 # ------------------------------------------------------------------------------
 # 5. 디렉토리 구조 및 접근 권한(ACL) 설정
 # ------------------------------------------------------------------------------
@@ -211,9 +219,9 @@ echo "[5/6] Establishing Directory Hierarchy and Permissions..."
 # [2차]: 에이전트 본사 사무실 주소를 정의합니다.
 AGENT_HOME="/home/agent-admin/agent-app"
 
-# [1차]: 로그가 적재될 시스템 로그 경로 변수를 /var/log/agent-app 으로 지정합니다.
-# [2차]: 순찰 일지 서류 보관실 주소를 정의합니다.
-LOG_DIR="/var/log/agent-app"
+# [1차]: 로그가 적재될 시스템 로그 경로 변수를 과제 표준 규격인 /var/log/agent-app 으로 지정합니다.
+# [2차]: 순찰 일지 서류 보관실 주소를 정의합니다. (환경변수 AGENT_LOG_DIR이 있으면 우선 적용)
+LOG_DIR="${AGENT_LOG_DIR:-/var/log/agent-app}"
 
 # [1차]: 스크립트 실행 파일 보관용 bin 디렉토리를 생성합니다.
 # [2차]: 순찰 도구실(bin) 방을 만듭니다.
@@ -231,17 +239,33 @@ mkdir -p "${AGENT_HOME}/api_keys"
 # [2차]: 병원 의무기록실(LOG_DIR) 방을 만듭니다.
 mkdir -p "${LOG_DIR}"
 
-# --- 1) upload_files 설정 ---
+# [1차]: agent-common 그룹 소속 계정(agent-test 등)이 upload_files 경로로 진입(traverse)할 수 있도록 상위 홈 디렉토리에 ACL rx 권한을 부여합니다.
+setfacl -m g:agent-common:rx /home/agent-admin
+chmod 755 "${AGENT_HOME}"
 # [1차]: upload_files의 소유자를 agent-admin, 소유 그룹을 agent-common으로 변경합니다.
 # [2차]: 공용 창고의 관리 책임자를 admin으로 두고, 소속 그룹을 일반 사원(common)으로 지정합니다.
 chown agent-admin:agent-common "${AGENT_HOME}/upload_files"
 
 # [1차]: 권한 2770 부여 (2: SetGID 비트, 7: 소유자 rwx, 7: 그룹 rwx, 0: others 전면 차단)
 # [2차]: 창고 문에 '2770' 번호키를 겁니다. 누구나 파일을 넣을 수 있고(rwx), 새 상자를 넣으면 무조건 공용 라벨(SetGID)이 붙습니다.
+# 마이: 2: SetGID 비트의 뜻은 폴더안에 새로운 폴더를 만들면 해당속성을 부모속성을 상속시킨다는 뜻
+# 마이:  "앞으로 여기에 들어오는 파일은 전부 '우리 팀 공용 소속'으로 명찰을 바꿔라!"
 chmod 2770 "${AGENT_HOME}/upload_files"
 
-# [1차]: POSIX Default ACL을 설정하여, 향후 이 폴더 안에 생성되는 모든 파일/폴더에 agent-common 그룹 rwx 권한이 자동 상속되게 합니다.
+# [1차]: POSIX Default ACL을 설정하여, 향후 이 폴더 안에 생성되는 모든 파일/폴더에 agent-common 그룹
+# rwx 권한이 자동 상속되게 합니다.
 # [2차]: 앞으로 이 창고에 들어오는 모든 새 상자에도 공용 사원증으로 열 수 있는 도장을 자동으로 찍어줍니다.
+# 마이: "그리고 그 파일들은 '우리 팀원 누구나 수정(rwx)'할 수 있게 자물쇠를 항상 열어둬라!"
+# setfacl (Set File Access Control Lists) 뜻: 파일의 **세부 접근 권한(ACL)을 설정(Set)**하는 리눅스 명령어
+# -d (Default - 기본값 / 상속) 뜻: **"지금 있는 파일이 아니라, 앞으로 이 폴더 안에 새로 만들어질 모든 자식 파일/폴더"**에 적용하겠다는 옵
+#  -m (Modify - 수정 / 규칙 추가) 뜻: 새로운 권한 규칙을 **추가하거나 기존 규칙을 수정(Modify)**하겠다는 옵션입니다.
+# g (Group): 사용자 개인(u)이 아니라 **특정 그룹(g)**을 대상으로 하겠다!
+# agent-common: 권한을 부여받을 그룹 이름입니다.
+# rwx (Read, Write, eXecute): 부여할 권한
+# 2>: 리눅스에서 1번은 정상 출력(STDOUT), **2번은 에러 출력(STDERR)**을 뜻합니다.
+#/dev/null: 리눅스의 **'블랙홀(휴지통)'**입니다. 여기에 들어간 글자는 화면에 안 보이고 영원히 증발합니다.
+# 뜻: 혹시 이 명령어를 실행하다가 에러(예: ACL 패키지가 안 깔려있거나 지원 안 되는 파일시스템)가 나더라도, 터미널 화면에 시뻘건 에러 글씨를 
+# 띄우지 말고 조용히 버려라!
 setfacl -d -m g:agent-common:rwx "${AGENT_HOME}/upload_files" 2>/dev/null || true
 
 # --- 2) api_keys 설정 ---
@@ -333,6 +357,29 @@ export AGENT_KEY_PATH="${SECRET_KEY_PATH}"
 export AGENT_LOG_DIR="${LOG_DIR}"
 EOF
 
+# --- 8) systemd 서비스 등록 (부팅 시 자동 기동) ---
+cat << 'EOF' > /etc/systemd/system/agent-app.service
+[Unit]
+Description=Codyssey B4-1 Python Agent Application
+After=network.target
+
+[Service]
+Type=simple
+User=agent-admin
+Group=agent-core
+WorkingDirectory=/home/agent-admin/agent-app
+ExecStart=/usr/bin/python3 -u /home/agent-admin/agent-app/agent_app.py
+Restart=no
+StandardOutput=append:/var/log/agent-app/app.log
+StandardError=append:/var/log/agent-app/app.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable agent-app
+systemctl restart agent-app || true
+
 # ------------------------------------------------------------------------------
 # 6. cron 자동 실행 등록 (agent-admin 계정)
 # ------------------------------------------------------------------------------
@@ -343,19 +390,37 @@ echo "[6/6] Registering monitor.sh in agent-admin crontab..."
 
 # [1차]: 매분(* * * * *) monitor.sh를 실행하고 결과를 cron.log에 누적(>>)하는 크론 명령어 문자열을 정의합니다.
 # [2차]: "매 1분마다 닥터의 등짝을 때려서 순찰을 보내고, 결과를 cron.log에 적어라"라는 시계 알람 문구를 적습니다.
+# * * * * * : 모든 날짜 데이터를 받아오고 그게 변할떄 알림을 받는다이기에 일종의 서식임. 0  9  *  *  1   을 하면 월요일 오전9시에 알림받는다.는 뜻이됨
+# ${AGENT_HOME}/bin/monitor.sh을 실행
+# 화살표 1개(>)는 기존 내용을 싹 지우고 새로 쓰는 **'덮어쓰기'**입니다.화살표 2개(>>)는 기존 내용을 보존하고 **그 밑에 계속 이어 붙이는 '누적 쓰기(Append)'**입니다.
+# ${LOG_DIR}/cron.log뜻: 스크립트 실행 결과를 누적해서 저장할 로그 파일의 이름과 경로
+# 2>&1 뜻: 에러(Error)가 나면 화면(터미널)에 보이지 말고, 로그 파일(cron.log) 뒤에 붙여서 같이 기록해라. 2번에 나오는 에러 메시지도 1에 보내고
+#1에 보내면 그게 합쳐져서 출력되니 로그에 기록됨. 
 CRON_JOB="* * * * * ${AGENT_HOME}/bin/monitor.sh >> ${LOG_DIR}/cron.log 2>&1"
 
 # [1차]: 기존 agent-admin의 crontab에서 중복된 monitor.sh 항목을 걸러내고(grep -v) 새 작업을 안전하게 등록합니다.
 # [2차]: 시계에 이미 같은 알람이 맞춰져 있으면 지우고, 깨끗하게 새 알람 하나만 딱 맞춰둡니다.
+# (): 뜻: 괄호 안에 있는 여러 명령어들의 출력을 하나의 큰 결과물로 한 번에 묶어서 취합하겠다는 뜻
+# crontab: 뜻: 리눅스에서 주기적으로 작업을 실행하는 '시간 예약 스케줄러(자명종 시계)'를 관리하는 명령어
+# -u (User): 뜻: 특정 사용자(여기서는 agent-admin)의 작업 목록을 보거나 수정하겠다는 뜻
+# -l (List): 뜻: 현재 등록된 작업 목록(List)을 보여달라는 뜻
+# 2>/dev/null : 뜻: 에러 메시지가 나오면 버려라 (보통 작업이 없을 때 "no crontab for user" 같은 에러가 나오는데 그걸 숨기기 위함)
+# grep -v "monitor.sh" : 뜻: 텍스트에서 'monitor.sh'라는 단어가 **포함되지 않은 줄**만 골라내라 (제외(Invert)의 뜻)
+# 7시1분에 깨운다는 식으로 등록되는게 아니야 매분 깨운다로 등록되기에 중복되면 매분 2명이 깨우는 사태가 일어남.
+# || true : 뜻: 앞의 명령이 실패해도(예: 작업이 하나도 없어서 grep이 에러를 뱉어도) 프로그램을 죽이지 말고 그냥 계속 진행해라 (True)
+# echo "${CRON_JOB}"의 텍스트가 출력되면 텍스트를 받아서  crontab -u agent-admin -에서 일을 함.
+# - 맨 뒤의 대시 기호: 뜻:  키보드 입력이나 파일이 아니라, **"앞에서 파이프(|)를 타고 넘어온 그 내용물 전체를 받아서 통째로 새 알람 목록으로 저장(덮어쓰기)해라!"**라는 리눅스 표준 약속 기호
+#크론 설정에 크론 잡을 읽고 설정으로 들어가서 알아서 1분마다 깨우는 매커니즘이 됨.
 (crontab -u agent-admin -l 2>/dev/null | grep -v "monitor.sh" || true; echo "${CRON_JOB}") | crontab -u agent-admin -
 
 # [1차]: cron 시스템 데몬을 부팅 시 자동 시작(enable)하도록 등록합니다.
 # [2차]: 컴퓨터가 껐다 켜져도 시계 태엽이 자동으로 감기도록 등록합니다.
-systemctl enable cron
+# 위에서 크론 설정한걸 시스템 서비스로 가동함. 
+systemctl enable cron 2>/dev/null || true
 
 # [1차]: cron 서비스를 재시작하여 방금 등록한 새 스케줄을 즉시 반영합니다.
 # [2차]: 시계 초침을 지금 즉시 움직이게 재시동합니다.
-systemctl restart cron || true
+systemctl restart cron 2>/dev/null || service cron restart 2>/dev/null || true
 
 # [1차]: 전체 인프라 설정이 성공적으로 끝났음을 알리는 완료 배너를 출력합니다.
 # [2차]: "축하합니다! 모든 인프라 공사가 완벽하게 끝났습니다!" 하고 축포를 쏩니다.

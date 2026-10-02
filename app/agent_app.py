@@ -88,7 +88,7 @@ def run_boot_sequence():
     except Exception as e:
         print(f"[Step 2] Validating API Secret Key: [FAILED] ({e})", file=sys.stderr)
         sys.exit(1)
-    time.sleep(0.3)
+    time.sleep(0.05)
 
     # --------------------------------------------------------------------------
     # [Step 3]: 파일 업로드 디렉토리 존재 및 읽기/쓰기(R/W) 권한 검증
@@ -102,7 +102,7 @@ def run_boot_sequence():
         print(f"[Step 3] Checking Upload Directory: [FAILED] (Permission denied: R/W required)", file=sys.stderr)
         sys.exit(1)
     print(f"[Step 3] Checking Upload Directory Permissions: [OK]")
-    time.sleep(0.3)
+    time.sleep(0.05)
 
     # --------------------------------------------------------------------------
     # [Step 4]: 로그 기록 디렉토리 쓰기(W) 권한 검증
@@ -118,7 +118,7 @@ def run_boot_sequence():
         print(f"[Step 4] Checking Log Directory: [FAILED] (Permission denied: {log_dir} write required)", file=sys.stderr)
         sys.exit(1)
     print(f"[Step 4] Checking Log Directory Permissions: [OK]")
-    time.sleep(0.3)
+    time.sleep(0.05)
 
 
     # 마이: 소켓이란 뭔가? 랜선으로는 지금 이 순간에도 유튜브 영상, 카카오톡 메시지, 웹서핑 데이터 등 
@@ -175,7 +175,7 @@ def run_boot_sequence():
         sys.exit(1)
 
     # - time.sleep(0.3) : 사람이 콘솔 글자를 편안하게 읽을 수 있도록 0.3초간 잠깐 숨을 고름
-    time.sleep(0.3)
+    time.sleep(0.05)
 
 
     # 5단계 통과 후 공식 준비 완료 신호 출력
@@ -216,7 +216,14 @@ def main():
     while True:
         try:
             conn, addr = sock.accept()# 오면 conn이란 연결통로와 주소를 받아서 아래 내용을 주고 바로 크로즈해버림. 
-            conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nAgent Status: OK\n")
+            response_body = b"Agent Status: OK\n"
+            response_header = (
+                f"HTTP/1.1 200 OK\r\n"
+                f"Content-Type: text/plain\r\n"
+                f"Content-Length: {len(response_body)}\r\n"
+                f"Connection: close\r\n\r\n"
+            ).encode("utf-8")
+            conn.sendall(response_header + response_body)
             conn.close()
         except socket.timeout:
             continue

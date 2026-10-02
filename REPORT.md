@@ -339,9 +339,24 @@ Thu Oct  1 14:07:15 KST 2026
 - **crontab 자동화**: 관제는 24시간 365일 중단 없이 일정한 주기로 수행되어야 하므로 OS 데몬 레벨의 스케줄러인 cron에 위임합니다.
 - **Log Rotation의 필수성**: 매분 로깅을 수행하면 시간이 지남에 따라 로그 파일이 수 기가바이트(GB) 이상으로 무한정 증가합니다. 이는 결국 서버의 디스크를 가득 채워(Disk Full) 시스템 전체가 마비되는 2차 장애를 유발합니다. 따라서 파일 크기를 10MB로 제한하고 최대 10개 백업 파일만 순환 보존하는 로테이션 정책을 통해 디스크 사용량을 최대 100MB 이하로 안전하게 고정해야 합니다.
 
+### Q7. 왜 도커(Docker)가 아닌 가상환경(WSL2 / VM Ubuntu 22.04)을 구축해 검증했는가? (도커의 구조적 모순)
+- **UFW 방화벽 모순**: 도커 컨테이너는 호스트 OS의 네트워크 커널(`iptables`)을 공유하기 때문에, 컨테이너 내부에서 `ufw enable`을 시도하면 컨테이너 전체 네트워크가 마비되거나 권한 오류(`iptables: Permission denied`)가 발생합니다.
+- **systemd 및 백그라운드 데몬 부재**: 도커는 단일 프로세스 격리 컨테이너이므로 PID 1번이 init(systemd)이 아닙니다. 따라서 `systemctl restart ssh`, `systemctl restart cron` 같은 OS 표준 서비스 제어 및 백그라운드 cron 스케줄링이 온전히 가동되지 않습니다.
+- **가상머신(WSL2/VM)의 정석성**: 과제에서 요구하는 완전한 독립 리눅스 커널, 네이티브 iptables(UFW), systemd 데몬, POSIX Default ACL 상속을 100% 동일하게 재현하고 무결점 검증을 수행하기 위해 **Ubuntu 22.04 LTS 가상환경**을 채택하여 모든 증거 자료를 실측하였습니다.
+
 ---
 
-## 5. 테스트 결과 요약
+## 5. 학습 노트 및 내재화 자료 연계
+
+본 프로젝트를 수행하며 코드 전반에 남겨진 상세 학습 메모 및 핵심 원리는 별도의 독립 문서인 [MY_STUDY_NOTES.md](file:///c:/Users/안재현/Documents/24_code/2609_codyssey/codyssey-b4-01/MY_STUDY_NOTES.md)에 집대성되어 있습니다:
+- 소켓의 바인딩 원리 및 `SOL_SOCKET` / `SO_REUSEADDR` 기계적 설정 이유
+- `sock.settimeout(1.0)` 동면 방지 및 `SIGINT` / `SIGTERM` 우아한 종료 핸들러
+- SetGID(`2770`)와 POSIX Default ACL(`setfacl -d`)을 함께 써야만 하는 이유 (umask 한계 극복)
+- `crontab` 멱등성 보장 (`grep -v "monitor.sh"`) 및 파이프 리다이렉션(`2>&1`, `| crontab -`)
+
+---
+
+## 6. 테스트 결과 요약
 
 - **스크립트 문법 검사 (`bash -n`)**: 오류 0건, 문법 통과
 - **자동화 단위/통합 테스트 (`tests/test_monitor.sh`)**:
@@ -352,3 +367,5 @@ Thu Oct  1 14:07:15 KST 2026
   - **종합 결과: 12개 검증 항목 전체 PASS (0 Failed)**
 - **애플리케이션 검증 (`tests/test_agent_app.sh`)**:
   - 5단계 부트 시퀀스 정상 출력, "Agent READY" 출력, TCP 15034 포트 정상 HTTP 응답 -> **[PASS]**
+- **가상환경 원스톱 마스터 검증**: `scripts/run_vm_demo.sh` 및 8대 증거 검증기 `scripts/verify_all.sh` 정상 구동 완료.
+- **로컬 엔드투엔드 시연**: `scripts/run_local_demo.py`를 통한 무인 관제 및 로그 적재 확인 완료.
